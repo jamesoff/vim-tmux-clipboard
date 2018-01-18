@@ -9,12 +9,31 @@ function! s:TmuxBufferName()
 endfunction
 
 function! s:TmuxBuffer()
-	return system('tmux show-buffer')
+	if has('nvim')
+		let s:job1 = jobstart(['tmux', 'show-buffer'], {
+					\ 'on_stdout': function('s:JobHandler'),
+					\ 'on_exit': function('s:JobHandler'),
+					\ 'stdout_buffered': v:true } )
+	else
+		let @" = system('tmux show-buffer')
+	endif
 endfunction
+
+function! s:JobHandler(job_id, data, event) dict
+	if a:event == 'stdout'
+		let s:chunks = join(a:data, "\n")
+	endif
+	if a:event == 'exit'
+		if a:data == 0
+			let @" = s:chunks
+		endif
+	endif
+endfunction
+
 
 function! s:Enable()
 
-	if $TMUX=='' 
+	if $TMUX==''
 		" not in tmux session
 		return
 	endif
@@ -27,10 +46,10 @@ function! s:Enable()
 		augroup vimtmuxclipboard
 			autocmd!
 			autocmd FocusLost * let s:lastbname=s:TmuxBufferName()
-			autocmd	FocusGained   * if s:lastbname!=s:TmuxBufferName() | let @" = s:TmuxBuffer() | endif
+			autocmd	FocusGained   * if s:lastbname!=s:TmuxBufferName() | call s:TmuxBuffer() | endif
 			autocmd TextYankPost * silent! call system('tmux loadb -',join(v:event["regcontents"],"\n"))
 		augroup END
-		let @" = s:TmuxBuffer()
+		call s:TmuxBuffer()
 	else
 		" vim doesn't support TextYankPost event
 		" This is a workaround for vim
